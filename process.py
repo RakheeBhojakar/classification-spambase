@@ -38,22 +38,37 @@ class spambase(object):
 	# 1 : [m1, std1]
 	# ...
 
-	def generateStatistics(self, dataframe):
+	def generateStatistics(self, train):
 		
 		for column in train.columns:
 			strColumn = str(column)
 			meanOfCol = train[column].mean()
 			stdOfCol = train[column].std()
+
+			# to avoid divide by zero in naive bayes..
+			if stdOfCol == 0:
+				stdOfCol = 0.000001
+
 			self.statistics[strColumn] = [meanOfCol, stdOfCol]
+			
 		return self.statistics
 
+	def computePrior(self, labels):
+		priorSpam, priorNSpam = 0.0, 0.0
+		priorSpam = (labels == 1).astype(int).sum() / len(labels)
+		priorNSpam = (labels == 0).astype(int).sum() / len(labels)
+		# 0.6, 0.4 approx. 
+		return priorSpam, priorNSpam
 
-classifier = spambase()
-train, trainLabels, test, testLabels = classifier.generateData()
-stats = classifier.generateStatistics(train)
 
-print(stats)
+def main():
+	classifier = spambase()
+	train, trainLabels, test, testLabels = classifier.generateData()
+	stats = classifier.generateStatistics(train)
+	trainPrior = classifier.computePrior(trainLabels)
+	# print(stats)
 
-
+if __name__ == '__main__':
+	main()
 
 
