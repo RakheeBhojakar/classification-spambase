@@ -7,12 +7,83 @@ Task - Naive Bayes and logistic regression
 '''
 import numpy, random, pandas as pd
 from sklearn.cross_validation import train_test_split
-from pprint import pprint
+import matplotlib.pyplot as plotter
+from sklearn.metrics import confusion_matrix
+import random, itertools
+
 
 # roughly 60/40 spam not spam split will have the following stats
 # spam = 1813, 725
 # not spam = 2788, 1672
 pd.set_option('expand_frame_repr', False)
+#### Confusion Matrix helper functions - sklearn metrics
+def plot_confusion_matrix(cm, title='Confusion matrix', cmap=None, normalize=True):
+    """
+    given a sklearn confusion matrix (cm), make a nice plot
+
+    Arguments
+    ---------
+    cm:           confusion matrix from sklearn.metrics.confusion_matrix
+
+    target_names: given classification classes such as [0, 1, 2]
+                  the class names, for example: ['high', 'medium', 'low']
+
+    title:        the text to display at the top of the matrix
+
+    cmap:         the gradient of the values displayed from matplotlib.pyplot.cm
+                  see http://matplotlib.org/examples/color/colormaps_reference.html
+                  plotter.get_cmap('jet') or plotter.cm.Blues
+
+    normalize:    If False, plot the raw numbers
+                  If True, plot the proportions
+
+    Usage
+    -----
+    plot_confusion_matrix(cm           = cm,                  # confusion matrix created by
+                                                              # sklearn.metrics.confusion_matrix
+                          normalize    = True,                # show proportions
+                          target_names = y_labels_vals,       # list of names of the classes
+                          title        = best_estimator_name) # title of graph
+
+    Citiation
+    ---------
+    http://scikit-learn.org/stable/auto_examples/model_selection/plot_confusion_matrix.html
+    https://www.kaggle.com/grfiv4/plot-a-confusion-matrix
+    """
+
+
+    accuracy = numpy.trace(cm) / float(numpy.sum(cm))
+    misclass = 1 - accuracy
+
+    if cmap is None:
+        cmap = plotter.get_cmap('Blues')
+
+    plotter.figure(figsize=(10,10))
+    plotter.imshow(cm, interpolation='nearest', cmap=cmap)
+    plotter.title(title)
+    plotter.colorbar()
+
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, numpy.newaxis]
+
+
+    thresh = cm.max() / 1.5 if normalize else cm.max() / 2
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        if normalize:
+            plotter.text(j, i, "{:0.4f}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+        else:
+            plotter.text(j, i, "{:,}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+
+    plotter.tight_layout()
+    plotter.ylabel('True label')
+    plotter.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
+    plotter.show()
+
 class spambase(object):
 
 	def __init__(self):
@@ -22,6 +93,11 @@ class spambase(object):
 		self.statisticsSpam = dict()
 		self.statisticsNotSpam = dict()
 		# self.probabilities = dict()
+	def productOfList(self, probabilities):
+		product = 0.0
+		for i in probabilities:
+			product *= i
+		return product
 
 	def generateData(self):
 
@@ -37,7 +113,7 @@ class spambase(object):
 		testData = notSpam_test.append(spam_test)
 		testLabels = testData.pop('is_spam')
 		# return them
-		return trainData, trainLabels, testData, testLabels
+		return trainData, trainLabels, testData.values.tolist(), testLabels.values.tolist()
 
 	def generateStatistics(self, train, trainLabels):
 
@@ -63,6 +139,8 @@ class spambase(object):
 			meanOfCol = spamdf[column].mean()
 			stdOfCol = spamdf[column].std()
 			# to avoid divide by zero error in gaussian naive bayes
+			if meanOfCol == 0:
+				meanOfCol = 0.00001
 			if stdOfCol == 0:
 				stdOfCol = 0.000001
 			self.statisticsSpam[strColumn] = [meanOfCol, stdOfCol]
@@ -73,10 +151,13 @@ class spambase(object):
 			meanOfCol = notSpamdf[column].mean()
 			stdOfCol = notSpamdf[column].std()
 			# to avoid divide by zero error in gaussian naive bayes
+			if meanOfCol == 0:
+				meanOfCol = 0.00001
 			if stdOfCol == 0:
 				stdOfCol = 0.000001
 			self.statisticsNotSpam[strColumn] = [meanOfCol, stdOfCol]
 
+		# just debugging
 		# pprint(sorted(self.statisticsSpam.items(), key=lambda s: s[0]))
 		# pprint(self.statisticsSpam[str(1)][0])
 		return self.statisticsNotSpam, self.statisticsSpam
@@ -91,31 +172,39 @@ class spambase(object):
 		return priorSpam, priorNSpam
 
 	def gaussianProbability(self, feature, mean, std):
-
+		# computes gaussian probability - given in the slides
 		first_term = (1 / numpy.sqrt(2 * numpy.pi * numpy.power(std, 2)))
 		second_term = numpy.exp(-numpy.power((feature - mean), 2) / 2 * numpy.power(std, 2))
 		return numpy.log(first_term * second_term)
 
-	def calcProbabilities(self, testdata, priors):
-		# converting to lists for ease. cuz why not. 
-		testdatalist = testdata.values.tolist()
+	def predict(self, testInstance, testLabel, priors):
+		# appending the prior terms first. 
 		positiveProbabilities = list()
+		positiveProbabilities.append(priors[0])
 		negativeProbabilites = list()
-		for row in testdatalist:
-			for i, X in enumerate(row):
-				# calc positive class probability using the dict built above
-				i = str(i)
-				# print(self.statisticsSpam[i])
-				mean = self.statisticsSpam[i][0]
-				std = self.statisticsSpam[i][1]
-				posp = self.gaussianProbability(X, mean, std)
-				positiveProbabilities.append(posp)
+		negativeProbabilites.append(priors[1])
 
-				# calc negative class probability using the dict built above
-				mean = self.statisticsNotSpam[i][0]
-				std = self.statisticsNotSpam[i][1]
-				negp = self.gaussianProbability(X, mean, std)
-				negativeProbabilites.append(negp)
+		for i, X in enumerate(testInstance):
+			
+			# converting to string because dict keys are str while enumerate returns an int
+			i = str(i)
+			# calc positive class probability using the dict built above
+			mean = self.statisticsSpam[i][0]
+			std = self.statisticsSpam[i][1]
+			posp = self.gaussianProbability(X, mean, std)
+			positiveProbabilities.append(posp)
+
+			# calc negative class probability using the dict built above
+			mean = self.statisticsNotSpam[i][0]
+			std = self.statisticsNotSpam[i][1]
+			negp = self.gaussianProbability(X, mean, std)
+			negativeProbabilites.append(negp)
+		positivePred = numpy.prod(numpy.array(positiveProbabilities))
+		negativePred = numpy.prod(numpy.array(negativeProbabilites))
+		if positivePred > negativePred:
+			return 1
+		else:
+			return 0
 
 
 def main():
@@ -123,7 +212,13 @@ def main():
 	train, trainLabels, test, testLabels = classifier.generateData()
 	stats = classifier.generateStatistics(train, trainLabels)
 	priors = classifier.computePrior(trainLabels)
-	classifier.calcProbabilities(test, priors)
+	predictions = list()
+	for instance, label in zip(test, testLabels):
+		predictions.append(classifier.predict(instance, label, priors))
+
+	cm = confusion_matrix(predictions, testLabels)
+	plot_confusion_matrix(cm)
+
 
 if __name__ == '__main__':
 	main()
