@@ -83,28 +83,30 @@ def plot_confusion_matrix(cm, title='Confusion matrix', cmap=None, normalize=Tru
     plotter.ylabel('True label')
     plotter.xlabel('Predicted label\naccuracy={:0.4f}; misclass={:0.4f}'.format(accuracy, misclass))
     plotter.show()
+    # plotter.savefig('initial.png')
 
 class spambase(object):
 
 	def __init__(self):
-
+		# OOP style for garbage collection, object handling
 		self.data = pd.read_csv('spambase.data', header=None)
 		self.data.rename(columns = {57 : 'is_spam'}, inplace=True)
 		self.statisticsSpam = dict()
 		self.statisticsNotSpam = dict()
-		# self.probabilities = dict()
+
+	# using numpy instead of this function
 	def productOfList(self, probabilities):
 		product = 0.0
 		for i in probabilities:
 			product *= i
 		return product
 
+	# split train test data
 	def generateData(self):
-
 		# separate dataset into spam and not spam 
 		spam = self.data[self.data['is_spam'] == 1]
 		notSpam = self.data[self.data['is_spam'] == 0]
-		# split using sklearn test train split - random 
+		# split using sklearn test train split - random 0.6 for training and 0.4 for testing
 		spam_train, spam_test = train_test_split(spam, train_size=0.6)
 		notSpam_train, notSpam_test = train_test_split(notSpam, train_size=0.6)
 		# divide the data from labels for easier fitting
@@ -163,7 +165,7 @@ class spambase(object):
 		return self.statisticsNotSpam, self.statisticsSpam
 			
 
-
+	# computes prior values for the two classes - count spam/not spam instances
 	def computePrior(self, labels):
 		priorSpam, priorNSpam = 0.0, 0.0
 		priorSpam = (labels == 1).astype(int).sum() / len(labels)
@@ -177,15 +179,15 @@ class spambase(object):
 		second_term = numpy.exp(-numpy.power((feature - mean), 2) / 2 * numpy.power(std, 2))
 		return numpy.log(first_term * second_term)
 
+	# predicting test instances using gaussian probability
 	def predict(self, testInstance, testLabel, priors):
 		# appending the prior terms first. 
 		positiveProbabilities = list()
-		positiveProbabilities.append(priors[0])
+		positiveProbabilities.append(numpy.log(priors[0]))
 		negativeProbabilites = list()
-		negativeProbabilites.append(priors[1])
+		negativeProbabilites.append(numpy.log(priors[1]))
 
 		for i, X in enumerate(testInstance):
-			
 			# converting to string because dict keys are str while enumerate returns an int
 			i = str(i)
 			# calc positive class probability using the dict built above
@@ -199,28 +201,25 @@ class spambase(object):
 			std = self.statisticsNotSpam[i][1]
 			negp = self.gaussianProbability(X, mean, std)
 			negativeProbabilites.append(negp)
-		positivePred = numpy.prod(numpy.array(positiveProbabilities))
-		negativePred = numpy.prod(numpy.array(negativeProbabilites))
+		positivePred = sum(numpy.array(positiveProbabilities))
+		negativePred = sum(numpy.array(negativeProbabilites))
 		if positivePred > negativePred:
 			return 1
 		else:
 			return 0
 
+	# need to write accuracy function explicitly. Although its covered in the confusion matrix method.
 
 def main():
+
 	classifier = spambase()
 	train, trainLabels, test, testLabels = classifier.generateData()
-	stats = classifier.generateStatistics(train, trainLabels)
-	priors = classifier.computePrior(trainLabels)
-	predictions = list()
-	for instance, label in zip(test, testLabels):
-		predictions.append(classifier.predict(instance, label, priors))
+	stats, priors = classifier.generateStatistics(train, trainLabels), classifier.computePrior(trainLabels)
+	predictions = [classifier.predict(instance, label, priors) for instance, label in zip(test, testLabels)]
 
-	cm = confusion_matrix(predictions, testLabels)
-	plot_confusion_matrix(cm)
+	# prints the accuracy, misclassified points, confusion matrix of the two classes. 
+	plot_confusion_matrix(confusion_matrix(predictions, testLabels))
 
 
 if __name__ == '__main__':
 	main()
-
-
