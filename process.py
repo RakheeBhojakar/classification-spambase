@@ -94,13 +94,6 @@ class spambase(object):
 		self.statisticsSpam = dict()
 		self.statisticsNotSpam = dict()
 
-	# using numpy instead of this function
-	def productOfList(self, probabilities):
-		product = 0.0
-		for i in probabilities:
-			product *= i
-		return product
-
 	# split train test data
 	def generateData(self):
 		# separate dataset into spam and not spam 
@@ -134,7 +127,7 @@ class spambase(object):
 		# converting to pandas for better statistic calculation
 		spamdf = pd.DataFrame(spam)
 		notSpamdf = pd.DataFrame(notSpam)
-		# print(notSpamdf)
+
 		# find mean, std for each feature given its class
 		for column in spamdf.columns:
 			strColumn = str(column)
@@ -159,54 +152,55 @@ class spambase(object):
 				stdOfCol = 0.000001
 			self.statisticsNotSpam[strColumn] = [meanOfCol, stdOfCol]
 
-		# just debugging
-		# pprint(sorted(self.statisticsSpam.items(), key=lambda s: s[0]))
-		# pprint(self.statisticsSpam[str(1)][0])
 		return self.statisticsNotSpam, self.statisticsSpam
 			
 
 	# computes prior values for the two classes - count spam/not spam instances
 	def computePrior(self, labels):
-		priorSpam, priorNSpam = 0.0, 0.0
+		# priorSpam, priorNSpam = 0.0, 0.0
 		priorSpam = (labels == 1).astype(int).sum() / len(labels)
 		priorNSpam = (labels == 0).astype(int).sum() / len(labels)
-		# 0.6, 0.4 approx. if you print them out. 
+		# 0.606, 0.393 approx. if you print them out. 
 		return priorSpam, priorNSpam
 
 	def gaussianProbability(self, feature, mean, std):
 		# computes gaussian probability - given in the slides
 		first_term = (1 / numpy.sqrt(2 * numpy.pi * numpy.power(std, 2)))
 		second_term = numpy.exp(-numpy.power((feature - mean), 2) / 2 * numpy.power(std, 2))
-		return numpy.log(first_term * second_term)
+		prob = first_term * second_term
+		if prob == 0:
+			prob = 0.0001
+		return numpy.log(prob)
 
 	# predicting test instances using gaussian probability
 	def predict(self, testInstance, testLabel, priors):
 		# appending the prior terms first. 
 		positiveProbabilities = list()
-		positiveProbabilities.append(numpy.log(priors[0]))
+		positiveProbabilities.append(priors[0])
 		negativeProbabilites = list()
-		negativeProbabilites.append(numpy.log(priors[1]))
-
+		negativeProbabilites.append(priors[1])
 		for i, X in enumerate(testInstance):
 			# converting to string because dict keys are str while enumerate returns an int
 			i = str(i)
 			# calc positive class probability using the dict built above
-			mean = self.statisticsSpam[i][0]
-			std = self.statisticsSpam[i][1]
+			mean, std  = self.statisticsSpam[i]
 			posp = self.gaussianProbability(X, mean, std)
+			if numpy.isinf(posp):
+				posp = 0.000001
 			positiveProbabilities.append(posp)
 
 			# calc negative class probability using the dict built above
-			mean = self.statisticsNotSpam[i][0]
-			std = self.statisticsNotSpam[i][1]
+			mean, std = self.statisticsNotSpam[i]
 			negp = self.gaussianProbability(X, mean, std)
+			if numpy.isinf(negp):
+				negp = 0.000001
 			negativeProbabilites.append(negp)
 		positivePred = sum(numpy.array(positiveProbabilities))
 		negativePred = sum(numpy.array(negativeProbabilites))
 		if positivePred > negativePred:
-			return 1
-		else:
 			return 0
+		else:
+			return 1
 
 	# need to write accuracy function explicitly. Although its covered in the confusion matrix method.
 
@@ -214,9 +208,13 @@ def main():
 
 	classifier = spambase()
 	train, trainLabels, test, testLabels = classifier.generateData()
-	stats, priors = classifier.generateStatistics(train, trainLabels), classifier.computePrior(trainLabels)
-	predictions = [classifier.predict(instance, label, priors) for instance, label in zip(test, testLabels)]
+	stats = classifier.generateStatistics(train, trainLabels)
 
+	# hard coded the priors. But if you actually call the function computePrior() it will give the same thing
+	# priors = classifier.computePrior(trainLabels.values.tolist())
+	priors = (0.606, 0.39)
+	
+	predictions = [classifier.predict(instance, label, priors) for instance, label in zip(test, testLabels)]
 	# prints the accuracy, misclassified points, confusion matrix of the two classes. 
 	plot_confusion_matrix(confusion_matrix(predictions, testLabels))
 
