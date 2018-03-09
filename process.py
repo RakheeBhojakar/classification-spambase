@@ -9,12 +9,15 @@ import numpy, random, pandas as pd
 from sklearn.cross_validation import train_test_split
 import matplotlib.pyplot as plotter
 from sklearn.metrics import confusion_matrix
-import random, itertools
+import itertools
+import pdb
 
 
 # roughly 60/40 spam not spam split will have the following stats
 # spam = 1813, 725
 # not spam = 2788, 1672
+
+# printing the entire data frame
 pd.set_option('expand_frame_repr', False)
 #### Confusion Matrix helper functions - sklearn metrics
 def plot_confusion_matrix(cm, title='Confusion matrix', cmap=None, normalize=True):
@@ -88,7 +91,7 @@ def plot_confusion_matrix(cm, title='Confusion matrix', cmap=None, normalize=Tru
 class spambase(object):
 
 	def __init__(self):
-		# OOP style for garbage collection, object handling
+		# OOP style
 		self.data = pd.read_csv('spambase.data', header=None)
 		self.data.rename(columns = {57 : 'is_spam'}, inplace=True)
 		self.statisticsSpam = dict()
@@ -110,6 +113,7 @@ class spambase(object):
 		# return them
 		return trainData, trainLabels, testData.values.tolist(), testLabels.values.tolist()
 
+
 	def generateStatistics(self, train, trainLabels):
 
 		''' builds the probabilistic model. Need to make it less verbose. '''
@@ -127,7 +131,7 @@ class spambase(object):
 		# converting to pandas for better statistic calculation
 		spamdf = pd.DataFrame(spam)
 		notSpamdf = pd.DataFrame(notSpam)
-
+				
 		# find mean, std for each feature given its class
 		for column in spamdf.columns:
 			strColumn = str(column)
@@ -151,9 +155,34 @@ class spambase(object):
 			if stdOfCol == 0:
 				stdOfCol = 0.000001
 			self.statisticsNotSpam[strColumn] = [meanOfCol, stdOfCol]
-
+		# pdb.set_trace()
 		return self.statisticsNotSpam, self.statisticsSpam
 			
+	def alternativeStatistics(self, train, trainLabels):
+		'''
+		This function was written for sanity check - to make sure model is built properly. 
+		Fundamentally it is the same as the generateStatistics(). Since I wrote it anyway, Im decided to leave as is. 
+		'''
+		spamStats, notSpamStats = {}, {}
+		train = train.values.tolist()
+		trainLabels = trainLabels.values.tolist()
+
+		spam, notspam = list(), list()
+
+		for data, label in zip(train, trainLabels):
+			if label == 0:
+				notspam.append(data)
+			else:
+				spam.append(data)
+		
+		numpySpam = numpy.array(spam).T
+		numpyNSpam = numpy.array(notspam).T
+		for idx, row in enumerate(numpySpam):
+			spamStats[str(idx)] = [numpy.mean(row), numpy.std(row)]
+		# print(numpySpam.shape, numpyNSpam.shape)
+		for idx, row in enumerate(numpyNSpam):
+			notSpamStats[str(idx)] = [numpy.mean(row), numpy.std(row)]
+		pdb.set_trace()
 
 	# computes prior values for the two classes - count spam/not spam instances
 	def computePrior(self, labels):
@@ -179,6 +208,7 @@ class spambase(object):
 		positiveProbabilities.append(priors[0])
 		negativeProbabilites = list()
 		negativeProbabilites.append(priors[1])
+
 		for i, X in enumerate(testInstance):
 			# converting to string because dict keys are str while enumerate returns an int
 			i = str(i)
@@ -195,8 +225,8 @@ class spambase(object):
 			if numpy.isinf(negp):
 				negp = 0.000001
 			negativeProbabilites.append(negp)
-		positivePred = sum(numpy.array(positiveProbabilities))
-		negativePred = sum(numpy.array(negativeProbabilites))
+		positivePred = sum(positiveProbabilities)
+		negativePred = sum(negativeProbabilites)
 		if positivePred > negativePred:
 			return 0
 		else:
@@ -209,13 +239,19 @@ def main():
 	classifier = spambase()
 	train, trainLabels, test, testLabels = classifier.generateData()
 	stats = classifier.generateStatistics(train, trainLabels)
-
+	# stats2 = classifier.alternativeStatistics(train, trainLabels)
 	# hard coded the priors. But if you actually call the function computePrior() it will give the same thing
 	# priors = classifier.computePrior(trainLabels.values.tolist())
 	priors = (0.606, 0.39)
-	
+
 	predictions = [classifier.predict(instance, label, priors) for instance, label in zip(test, testLabels)]
-	# prints the accuracy, misclassified points, confusion matrix of the two classes. 
+	
+	# print("predicted spam - {} predicted nspam - {}".format(predictions.count(1), predictions.count(0)))
+	# print("actual spam - {} actual nspam - {}".format(testLabels.count(1), testLabels.count(0)))
+	# prints the accuracy, misclassified points, confusion matrix of the two classes.
+	# cm = confusion_matrix(predictions, testLabels)
+	# print(cm)
+	# pdb.set_trace() 
 	plot_confusion_matrix(confusion_matrix(predictions, testLabels))
 
 
